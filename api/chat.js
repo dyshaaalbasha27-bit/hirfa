@@ -27,11 +27,14 @@ export default async function handler(req) {
   if (!contents.length || contents[0].role !== 'user')
     contents.unshift({ role: 'user', parts: [{ text: ' ' }] });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
 
   const upstream = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
     body: JSON.stringify({
       contents,
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
@@ -86,4 +89,4 @@ export default async function handler(req) {
       'Cache-Control': 'no-cache',
     },
   });
-                                            }
+}
