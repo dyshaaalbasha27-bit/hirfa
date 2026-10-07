@@ -9,42 +9,34 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: cors });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return new Response('GEMINI_API_KEY missing', { status: 500, headers: cors });
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return new Response('OPENROUTER_API_KEY missing', { status: 500, headers: cors });
 
   let body;
   try { body = await req.json(); } catch { return new Response('Bad JSON', { status: 400, headers: cors }); }
 
-  const { messages = [], model = 'gemini-2.0-flash', system = '' } = body;
+  const { messages = [], model = 'google/gemini-2.0-flash-exp:free', system = '' } = body;
 
-  const contents = [];
+  const chatMessages = [];
+  if (system) chatMessages.push({ role: 'system', content: system });
   for (const m of messages) {
-    contents.push({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: String(m.content || '') }],
-    });
+    chatMessages.push({ role: m.role, content: String(m.content || '') });
   }
-  if (!contents.length || contents[0].role !== 'user')
-    contents.unshift({ role: 'user', parts: [{ text: ' ' }] });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
-
-  const upstream = await fetch(url, {
+  const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://hirfa.vercel.app',
+      'X-Title': 'Hirfa',
     },
     body: JSON.stringify({
-      contents,
-      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      generationConfig: { temperature: 0.75, maxOutputTokens: 8192 },
-      safetySettings: [
-        'HARM_CATEGORY_HARASSMENT',
-        'HARM_CATEGORY_HATE_SPEECH',
-        'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        'HARM_CATEGORY_DANGEROUS_CONTENT',
-      ].map(category => ({ category, threshold: 'BLOCK_ONLY_HIGH' })),
+      model,
+      messages: chatMessages,
+      stream: true,
+      temperature: 0.75,
+      max_tokens: 8192,
     }),
   });
 
@@ -72,7 +64,7 @@ export default async function handler(req) {
             if (!payload || payload === '[DONE]') continue;
             try {
               const j = JSON.parse(payload);
-              const t = j?.candidates?.[0]?.content?.parts?.map(x => x.text).join('') || '';
+              const t = j?.choices?.[0]?.delta?.content || '';
               if (t) controller.enqueue(encoder.encode(t));
             } catch {}
           }
